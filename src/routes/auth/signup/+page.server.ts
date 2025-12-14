@@ -3,24 +3,27 @@ import type { Actions, PageServerLoad } from './$types';
 import { createDb } from '$lib/server/db';
 import { createUser, createSession, sessionCookie } from '$lib/server/auth';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	// Redirect if already logged in
 	if (locals.user) {
-		throw redirect(302, '/');
+		const redirectTo = url.searchParams.get('redirect') || '/';
+		throw redirect(302, redirectTo);
 	}
-	return {};
+	return {
+		redirect: url.searchParams.get('redirect') || ''
+	};
 };
 
 export const actions: Actions = {
-	default: async ({ request, platform, cookies }) => {
+	default: async ({ request, platform, cookies, url }) => {
 		if (!platform?.env?.DB) {
-			return fail(500, { message: 'Database not available' });
+			return fail(500, { message: 'Database not available', email: '' });
 		}
 
 		const db = createDb(platform.env.DB);
 		const formData = await request.formData();
 		
-		const email = formData.get('email')?.toString();
+		const email = formData.get('email')?.toString() || '';
 		const password = formData.get('password')?.toString();
 		const confirmPassword = formData.get('confirmPassword')?.toString();
 		const name = formData.get('name')?.toString();
@@ -55,9 +58,11 @@ export const actions: Actions = {
 				expires: session.expiresAt
 			});
 
-			// Redirect to home page
-			throw redirect(302, '/');
+			// Redirect to intended page or home
+			const redirectTo = url.searchParams.get('redirect') || '/';
+			throw redirect(302, redirectTo);
 		} catch (error) {
+			if (error instanceof Response) throw error; // Re-throw redirects
 			const message = error instanceof Error ? error.message : 'Failed to create account';
 			return fail(400, { message, email });
 		}

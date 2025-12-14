@@ -6,22 +6,24 @@ import { authenticateUser, createSession, sessionCookie } from '$lib/server/auth
 export const load: PageServerLoad = async ({ locals, url }) => {
 	// Redirect if already logged in
 	if (locals.user) {
-		const redirectTo = url.searchParams.get('redirectTo') || '/';
+		const redirectTo = url.searchParams.get('redirect') || '/';
 		throw redirect(302, redirectTo);
 	}
-	return {};
+	return {
+		redirect: url.searchParams.get('redirect') || ''
+	};
 };
 
 export const actions: Actions = {
 	default: async ({ request, platform, cookies, url }) => {
 		if (!platform?.env?.DB) {
-			return fail(500, { message: 'Database not available' });
+			return fail(500, { message: 'Database not available', email: '' });
 		}
 
 		const db = createDb(platform.env.DB);
 		const formData = await request.formData();
 		
-		const email = formData.get('email')?.toString();
+		const email = formData.get('email')?.toString() || '';
 		const password = formData.get('password')?.toString();
 
 		// Validation
@@ -47,7 +49,7 @@ export const actions: Actions = {
 			});
 
 			// Redirect to intended page or home
-			const redirectTo = url.searchParams.get('redirectTo') || '/';
+			const redirectTo = url.searchParams.get('redirect') || '/';
 			throw redirect(302, redirectTo);
 		} catch (error) {
 			if (error instanceof Response) throw error; // Re-throw redirects

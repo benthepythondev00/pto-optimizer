@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import SEO from '$lib/components/SEO.svelte';
 	import CountrySelect from '$lib/components/CountrySelect.svelte';
 	import ResultCard from '$lib/components/ResultCard.svelte';
@@ -29,9 +31,17 @@
 	const freeCountries: CountryCode[] = ['US'];
 	const isPremiumCountry = $derived(!freeCountries.includes(selectedCountry) && !usageStore.isPro);
 
-	// Initialize store on mount
+	// Initialize store on mount and check for upgrade query param
 	onMount(() => {
 		usageStore.init();
+		
+		// Check if user came back from auth with upgrade=true
+		const upgradeParam = $page.url.searchParams.get('upgrade');
+		if (upgradeParam === 'true') {
+			// Open upgrade modal and clean up URL
+			showUpgradeModal = true;
+			goto('/', { replaceState: true });
+		}
 	});
 
 	// Calculate optimization

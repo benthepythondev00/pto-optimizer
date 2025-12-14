@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { usageStore } from '$lib/stores/usage.svelte.js';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	
 	interface Props {
 		open?: boolean;
@@ -7,6 +9,13 @@
 	}
 	
 	let { open = false, onclose }: Props = $props();
+	
+	let loading = $state(false);
+	let error = $state('');
+	let selectedPlan = $state<'monthly' | 'yearly'>('monthly');
+	
+	// Get user from page data
+	let user = $derived($page.data.user);
 	
 	const features = [
 		{ icon: '♾️', title: 'Unlimited Optimizations', desc: 'No monthly limits' },
@@ -17,12 +26,46 @@
 		{ icon: '📊', title: 'Multi-Year Planning', desc: 'Plan 3 years ahead' },
 	];
 	
-	function handleUpgrade() {
-		// TODO: Integrate with Lemon Squeezy
-		window.open('https://pto-optimizer.lemonsqueezy.com/checkout', '_blank');
+	async function handleUpgrade() {
+		// If not logged in, redirect to signup with return URL
+		if (!user) {
+			const returnUrl = encodeURIComponent('/?upgrade=true');
+			goto(`/auth/signup?redirect=${returnUrl}`);
+			onclose?.();
+			return;
+		}
+		
+		loading = true;
+		error = '';
+		
+		try {
+			const response = await fetch('/api/stripe/checkout', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ plan: selectedPlan })
+			});
+			
+			const data = await response.json();
+			
+			if (!response.ok) {
+				throw new Error(data.message || 'Failed to create checkout session');
+			}
+			
+			// Redirect to Stripe checkout
+			if (data.url) {
+				window.location.href = data.url;
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Something went wrong';
+		} finally {
+			loading = false;
+		}
 	}
 	
 	function handleClose() {
+		error = '';
 		onclose?.();
 	}
 </script>
@@ -34,7 +77,7 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
 		onclick={(e) => e.target === e.currentTarget && handleClose()}
 	>
-		<div class="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+		<div class="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
 			<!-- Close button -->
 			<button 
 				onclick={handleClose}
@@ -82,30 +125,72 @@
 				{/each}
 			</div>
 			
-			<!-- Pricing -->
-			<div class="mb-6 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 p-4">
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-sm text-gray-600">Pro Plan</p>
-						<div class="flex items-baseline gap-1">
-							<span class="text-3xl font-bold text-gray-900">$4.99</span>
-							<span class="text-gray-500">/month</span>
+			<!-- Plan selection -->
+			<div class="mb-6 space-y-3">
+				<button
+					onclick={() => selectedPlan = 'monthly'}
+					class="w-full rounded-xl border-2 p-4 text-left transition-all {selectedPlan === 'monthly' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}"
+				>
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="font-semibold text-gray-900">Monthly</p>
+							<p class="text-sm text-gray-500">Billed monthly</p>
+						</div>
+						<div class="text-right">
+							<span class="text-2xl font-bold text-gray-900">$4.99</span>
+							<span class="text-gray-500">/mo</span>
 						</div>
 					</div>
-					<div class="text-right">
-						<p class="text-sm font-medium text-indigo-600">Save 35%</p>
-						<p class="text-sm text-gray-500">$39/year</p>
+				</button>
+				
+				<button
+					onclick={() => selectedPlan = 'yearly'}
+					class="relative w-full rounded-xl border-2 p-4 text-left transition-all {selectedPlan === 'yearly' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}"
+				>
+					<div class="absolute -top-3 right-4 rounded-full bg-green-500 px-3 py-1 text-xs font-semibold text-white">
+						Save 35%
 					</div>
-				</div>
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="font-semibold text-gray-900">Yearly</p>
+							<p class="text-sm text-gray-500">Billed annually</p>
+						</div>
+						<div class="text-right">
+							<span class="text-2xl font-bold text-gray-900">$39</span>
+							<span class="text-gray-500">/year</span>
+							<p class="text-xs text-gray-400">($3.25/mo)</p>
+						</div>
+					</div>
+				</button>
 			</div>
+			
+			<!-- Error message -->
+			{#if error}
+				<div class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+					{error}
+				</div>
+			{/if}
 			
 			<!-- CTA buttons -->
 			<div class="space-y-3">
 				<button 
 					onclick={handleUpgrade}
-					class="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 font-semibold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl"
+					disabled={loading}
+					class="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 font-semibold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
 				>
-					Upgrade Now
+					{#if loading}
+						<span class="inline-flex items-center gap-2">
+							<svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							Processing...
+						</span>
+					{:else if !user}
+						Sign Up to Upgrade
+					{:else}
+						Upgrade Now
+					{/if}
 				</button>
 				<button 
 					onclick={handleClose}
@@ -115,12 +200,22 @@
 				</button>
 			</div>
 			
+			<!-- Login link for non-logged in users -->
+			{#if !user}
+				<p class="mt-4 text-center text-sm text-gray-500">
+					Already have an account? 
+					<a href="/auth/login?redirect={encodeURIComponent('/?upgrade=true')}" class="text-indigo-600 hover:underline">
+						Log in
+					</a>
+				</p>
+			{/if}
+			
 			<!-- Trust badges -->
 			<div class="mt-4 flex items-center justify-center gap-4 text-xs text-gray-400">
-				<span>🔒 Secure payment</span>
-				<span>•</span>
+				<span>Secure payment</span>
+				<span>|</span>
 				<span>Cancel anytime</span>
-				<span>•</span>
+				<span>|</span>
 				<span>7-day refund</span>
 			</div>
 		</div>
