@@ -1,0 +1,6 @@
+# PTO Optimizer - Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://pto-optimizer.is-a.dev/sitemap.xml

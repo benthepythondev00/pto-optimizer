@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+.svelte-kit/
+build/
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+test-results/
+playwright-report/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local Cloudflare
+.wrangler/
+.mf/
+
+# Drizzle
+drizzle/meta/
+
+# Misc
+*.local
+.vercel

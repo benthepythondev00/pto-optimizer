@@ -1,0 +1,20 @@
+{
+  "name": "PTO Optimizer",
+  "short_name": "PTO Optimizer",
+  "description": "Maximize your vacation days by strategically planning PTO around holidays",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "en",
+  "orientation": "portrait-primary"
+}
