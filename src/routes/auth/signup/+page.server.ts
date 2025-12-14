@@ -74,7 +74,14 @@ export const actions: Actions = {
 			const redirectTo = validateRedirectUrl(url.searchParams.get('redirect'));
 			throw redirect(302, redirectTo);
 		} catch (error) {
-			if (error instanceof Response) throw error; // Re-throw redirects
+			// Re-throw SvelteKit redirect/error responses
+			if (error && typeof error === 'object' && 'status' in error && 'location' in error) {
+				throw error; // This is a redirect
+			}
+			if (error instanceof Response) throw error;
+			
+			// Log the actual error for debugging (visible in Cloudflare dashboard)
+			console.error('Signup error:', error);
 			// Generic error message to prevent user enumeration
 			const message = error instanceof Error && error.message.includes('already exists') 
 				? 'An account with this email already exists'

@@ -6,9 +6,11 @@ import { users, sessions, subscriptions, type User, type Session } from './db/sc
 const SESSION_DURATION_DAYS = 30;
 const SESSION_COOKIE_NAME = 'session';
 
-// OWASP 2024 recommends 600,000 iterations for PBKDF2-SHA256
-// See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-const PBKDF2_ITERATIONS = 600000;
+// OWASP 2024 recommends 600,000 iterations for PBKDF2-SHA256, but
+// Cloudflare Workers limits PBKDF2 to 100,000 iterations max.
+// Using the maximum allowed for best security within platform constraints.
+// See: https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#supported-algorithms
+const PBKDF2_ITERATIONS = 100000;
 
 // Generate a secure random token
 export function generateSessionToken(): string {

@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 // Users table - stores user accounts
 export const users = sqliteTable('users', {
@@ -9,10 +10,10 @@ export const users = sqliteTable('users', {
 	stripeCustomerId: text('stripe_customer_id').unique(),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 	updatedAt: integer('updated_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	emailIdx: index('users_email_idx').on(table.email),
 	stripeCustomerIdx: index('users_stripe_customer_idx').on(table.stripeCustomerId),
@@ -27,7 +28,7 @@ export const sessions = sqliteTable('sessions', {
 	expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	userIdIdx: index('sessions_user_id_idx').on(table.userId),
 	expiresAtIdx: index('sessions_expires_at_idx').on(table.expiresAt),
@@ -47,10 +48,10 @@ export const subscriptions = sqliteTable('subscriptions', {
 	cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).default(false),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 	updatedAt: integer('updated_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	userIdIdx: index('subscriptions_user_id_idx').on(table.userId),
 	stripeCustomerIdx: index('subscriptions_stripe_customer_idx').on(table.stripeCustomerId),
@@ -67,7 +68,7 @@ export const usageRecords = sqliteTable('usage_records', {
 	count: integer('count').notNull().default(1),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	userMonthIdx: index('usage_user_month_idx').on(table.userId, table.month),
 	anonymousMonthIdx: index('usage_anonymous_month_idx').on(table.anonymousId, table.month),
@@ -83,7 +84,7 @@ export const optimizations = sqliteTable('optimizations', {
 	resultJson: text('result_json').notNull(), // JSON string of optimization result
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	userIdIdx: index('optimizations_user_id_idx').on(table.userId),
 	countryYearIdx: index('country_year_idx').on(table.country, table.year),
@@ -100,7 +101,7 @@ export const analytics = sqliteTable('analytics', {
 	userId: text('user_id'),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date()),
+		.default(sql`(unixepoch())`),
 }, (table) => ({
 	eventIdx: index('event_idx').on(table.event),
 	createdAtIdx: index('analytics_created_at_idx').on(table.createdAt),
