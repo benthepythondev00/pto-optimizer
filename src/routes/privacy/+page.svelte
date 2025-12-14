@@ -118,10 +118,10 @@
 			</div>
 
 			<div class="bg-gray-50 rounded-xl p-6">
-				<h4 class="font-semibold text-gray-900 mb-2">Plausible Analytics (Analytics)</h4>
+				<h4 class="font-semibold text-gray-900 mb-2">Cloudflare Web Analytics (Analytics)</h4>
 				<p class="text-gray-600 text-sm">
-					Privacy-friendly analytics. No cookies, no personal data, GDPR compliant by design.
-					<a href="https://plausible.io/privacy" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">Plausible Privacy Policy</a>
+					Privacy-friendly analytics built into Cloudflare. No cookies, no personal data, GDPR compliant.
+					<a href="https://www.cloudflare.com/web-analytics/" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">Cloudflare Web Analytics</a>
 				</p>
 			</div>
 		</section>
