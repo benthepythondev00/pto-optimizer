@@ -97,7 +97,7 @@
 				<li>Fork it for your own projects</li>
 			</ul>
 			<a
-				href="https://github.com/yourusername/pto-optimizer"
+				href="https://github.com/benthepythondev00/pto-optimizer"
 				target="_blank"
 				rel="noopener noreferrer"
 				class="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors no-underline"
@@ -114,7 +114,7 @@
 			<p class="text-gray-600">
 				Found a bug? Want to request a feature? Have a question? 
 				<a 
-					href="https://github.com/yourusername/pto-optimizer/issues"
+					href="https://github.com/benthepythondev00/pto-optimizer/issues"
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-blue-600 hover:text-blue-700"
