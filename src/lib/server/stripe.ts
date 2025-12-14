@@ -188,7 +188,19 @@ export async function syncStripeDataToDb(
 	console.log(`Synced ${stripeSubscriptions.length} subscriptions for user ${user.id}`);
 }
 
-// Verify Stripe webhook signature
+// Timing-safe string comparison
+function timingSafeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) {
+		b = a; // Maintain constant time even on length mismatch
+	}
+	let result = 0;
+	for (let i = 0; i < a.length; i++) {
+		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return result === 0 && a.length === b.length;
+}
+
+// Verify Stripe webhook signature with timing-safe comparison
 export async function verifyWebhookSignature(
 	payload: string,
 	signature: string,
@@ -211,10 +223,16 @@ export async function verifyWebhookSignature(
 		return false;
 	}
 	
-	// Check timestamp is within 5 minutes
+	// Check timestamp is within 5 minutes (300 seconds)
+	// This prevents replay attacks
 	const timestampNum = parseInt(timestamp, 10);
+	if (isNaN(timestampNum)) {
+		return false;
+	}
+	
 	const now = Math.floor(Date.now() / 1000);
 	if (Math.abs(now - timestampNum) > 300) {
+		console.warn('Stripe webhook timestamp too old or too far in future');
 		return false;
 	}
 	
@@ -240,8 +258,8 @@ export async function verifyWebhookSignature(
 		.map(b => b.toString(16).padStart(2, '0'))
 		.join('');
 	
-	// Compare signatures
-	return signatures.some(sig => sig === expectedSignature);
+	// Use timing-safe comparison to prevent timing attacks
+	return signatures.some(sig => timingSafeEqual(sig, expectedSignature));
 }
 
 // Ensure user has a Stripe customer ID

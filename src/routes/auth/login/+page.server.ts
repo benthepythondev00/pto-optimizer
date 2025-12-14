@@ -1,16 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { createDb } from '$lib/server/db';
-import { authenticateUser, createSession, sessionCookie } from '$lib/server/auth';
+import { authenticateUser, createSession, sessionCookie, validateRedirectUrl } from '$lib/server/auth';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
+	// Validate redirect URL to prevent open redirect attacks
+	const redirectTo = validateRedirectUrl(url.searchParams.get('redirect'));
+	
 	// Redirect if already logged in
 	if (locals.user) {
-		const redirectTo = url.searchParams.get('redirect') || '/';
 		throw redirect(302, redirectTo);
 	}
 	return {
-		redirect: url.searchParams.get('redirect') || ''
+		redirect: redirectTo === '/' ? '' : redirectTo
 	};
 };
 
@@ -36,6 +38,7 @@ export const actions: Actions = {
 			const user = await authenticateUser(db, email, password);
 			
 			if (!user) {
+				// Generic message to prevent user enumeration
 				return fail(400, { message: 'Invalid email or password', email });
 			}
 			
@@ -48,13 +51,13 @@ export const actions: Actions = {
 				expires: session.expiresAt
 			});
 
-			// Redirect to intended page or home
-			const redirectTo = url.searchParams.get('redirect') || '/';
+			// Redirect to intended page or home (validated to prevent open redirect)
+			const redirectTo = validateRedirectUrl(url.searchParams.get('redirect'));
 			throw redirect(302, redirectTo);
 		} catch (error) {
 			if (error instanceof Response) throw error; // Re-throw redirects
-			const message = error instanceof Error ? error.message : 'Failed to sign in';
-			return fail(400, { message, email });
+			// Generic error message
+			return fail(400, { message: 'Failed to sign in. Please try again.', email });
 		}
 	}
 };

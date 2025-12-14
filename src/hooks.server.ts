@@ -2,6 +2,25 @@ import type { Handle } from '@sveltejs/kit';
 import { createDb } from '$lib/server/db';
 import { validateSession, sessionCookie, getUserSubscription } from '$lib/server/auth';
 
+/**
+ * SECURITY NOTE: Rate Limiting
+ * 
+ * For production, consider implementing rate limiting for:
+ * - Login attempts (prevent brute force)
+ * - Signup (prevent spam accounts)
+ * - API endpoints (prevent abuse)
+ * 
+ * Options for Cloudflare:
+ * 1. Cloudflare Rate Limiting Rules (dashboard)
+ * 2. Cloudflare Workers Rate Limiting (KV-based)
+ * 3. D1-based rate limiting with sliding window
+ * 
+ * Recommended limits:
+ * - Login: 5 attempts per 15 minutes per IP
+ * - Signup: 3 accounts per hour per IP
+ * - API: 100 requests per minute per user
+ */
+
 export const handle: Handle = async ({ event, resolve }) => {
 	// Initialize defaults
 	event.locals.user = null;
@@ -51,5 +70,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const response = await resolve(event);
+	
+	// Add security headers
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('X-Frame-Options', 'DENY');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+	
 	return response;
 };
