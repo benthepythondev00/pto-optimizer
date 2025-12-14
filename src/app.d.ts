@@ -27,6 +27,9 @@ declare global {
 				STRIPE_SECRET_KEY: string;
 				STRIPE_WEBHOOK_SECRET: string;
 				STRIPE_PUBLISHABLE_KEY: string;
+				RESEND_API_KEY?: string; // Optional - for password reset emails
+				STRIPE_PRICE_MONTHLY?: string; // Optional - override default price ID
+				STRIPE_PRICE_YEARLY?: string; // Optional - override default price ID
 			};
 			context: {
 				waitUntil(promise: Promise<unknown>): void;

@@ -4,6 +4,9 @@ import { createDb } from '$lib/server/db';
 import { createPasswordResetToken } from '$lib/server/auth';
 import { checkRateLimit, getClientIP } from '$lib/server/rate-limit';
 import { logger } from '$lib/server/logger';
+import { sendPasswordResetEmail } from '$lib/server/email';
+import { users } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	// Redirect if already logged in
@@ -14,7 +17,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request, platform }) => {
+	default: async ({ request, platform, url }) => {
 		if (!platform?.env?.DB) {
 			return fail(500, { message: 'Database not available', email: '' });
 		}
@@ -52,17 +55,36 @@ export const actions: Actions = {
 			const token = await createPasswordResetToken(db, email);
 			
 			if (token) {
-				// In production, you would send an email here
-				// For now, we log it (visible in Cloudflare dashboard)
-				const resetUrl = `${platform.env.SITE_URL || 'https://pto-optimizer.pages.dev'}/auth/reset-password?token=${token}`;
-				logger.info('Password reset link generated', { 
-					email: email.substring(0, 3) + '***',
-					// In development, log the URL; in production, send email
-					resetUrl: process.env.NODE_ENV !== 'production' ? resetUrl : '[redacted]'
+				const siteUrl = url.origin || 'https://pto-optimizer.pages.dev';
+				const resetUrl = `${siteUrl}/auth/reset-password?token=${token}`;
+				
+				// Get user's name for personalized email
+				const user = await db.query.users.findFirst({
+					where: eq(users.email, email)
 				});
 				
-				// TODO: Implement email sending here
-				// await sendPasswordResetEmail(email, resetUrl);
+				// Send email if Resend API key is configured
+				if (platform.env.RESEND_API_KEY) {
+					const result = await sendPasswordResetEmail(
+						platform.env.RESEND_API_KEY,
+						email,
+						resetUrl,
+						user?.name || undefined
+					);
+					
+					if (!result.success) {
+						logger.error('Failed to send password reset email', new Error(result.error), {
+							email: email.substring(0, 3) + '***'
+						});
+						// Don't reveal email send failure to user
+					}
+				} else {
+					// No email service configured - log the URL for development
+					logger.warn('RESEND_API_KEY not configured - password reset email not sent', {
+						email: email.substring(0, 3) + '***',
+						resetUrl
+					});
+				}
 			}
 
 			// Always return success to prevent user enumeration
