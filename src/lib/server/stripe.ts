@@ -5,10 +5,10 @@ import { users, subscriptions } from './db/schema';
 // Stripe API base URL
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
-// Price IDs - these would be your actual Stripe price IDs
+// Price IDs - Live Stripe price IDs
 export const STRIPE_PRICES = {
-	monthly: 'price_monthly_placeholder', // $4.99/month
-	yearly: 'price_yearly_placeholder'    // $39.99/year (save 33%)
+	monthly: 'price_1SeGM9RjwzOUgrKay986Itsc', // $4.99/month
+	yearly: 'price_1SeGNZRjwzOUgrKayTM5wF15'   // $39/year (save 35%)
 };
 
 // Stripe API helper
