@@ -1,7 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { eq } from 'drizzle-orm';
 import { createDb } from '$lib/server/db';
+import { webhookEvents } from '$lib/server/db/schema';
 import { verifyWebhookSignature, syncStripeDataToDb } from '$lib/server/stripe';
+import { logger } from '$lib/server/logger';
 
 // Stripe events we care about
 const RELEVANT_EVENTS = [
@@ -35,12 +38,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	// Verify webhook signature
 	const isValid = await verifyWebhookSignature(payload, signature, webhookSecret);
 	if (!isValid) {
-		console.error('Invalid webhook signature');
+		logger.error('Invalid webhook signature');
 		throw error(400, 'Invalid signature');
 	}
 
 	// Parse the event
 	let event: {
+		id: string;
 		type: string;
 		data: {
 			object: {
@@ -54,15 +58,30 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
 		event = JSON.parse(payload);
 	} catch (err) {
-		console.error('Failed to parse webhook payload:', err);
+		logger.error('Failed to parse webhook payload', err);
 		throw error(400, 'Invalid payload');
 	}
 
-	console.log(`Received Stripe webhook: ${event.type}`);
+	logger.info('Received Stripe webhook', { eventId: event.id, eventType: event.type });
+
+	// Idempotency check - have we already processed this event?
+	const existingEvent = await db.query.webhookEvents.findFirst({
+		where: eq(webhookEvents.eventId, event.id)
+	});
+
+	if (existingEvent) {
+		logger.info('Webhook event already processed', { eventId: event.id });
+		return json({ received: true, processed: false, reason: 'already_processed' });
+	}
 
 	// Only process relevant events
 	if (!RELEVANT_EVENTS.includes(event.type)) {
-		return json({ received: true, processed: false });
+		// Record non-relevant events too to prevent re-processing
+		await db.insert(webhookEvents).values({
+			eventId: event.id,
+			eventType: event.type
+		}).onConflictDoNothing();
+		return json({ received: true, processed: false, reason: 'not_relevant' });
 	}
 
 	// Get customer ID from the event
@@ -86,7 +105,12 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	}
 
 	if (!customerId) {
-		console.error(`No customer ID found for event ${event.type}`);
+		logger.warn('No customer ID found for event', { eventId: event.id, eventType: event.type });
+		// Still record the event to prevent re-processing
+		await db.insert(webhookEvents).values({
+			eventId: event.id,
+			eventType: event.type
+		}).onConflictDoNothing();
 		return json({ received: true, processed: false, reason: 'no_customer_id' });
 	}
 
@@ -95,11 +119,19 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	// to avoid split states and race conditions
 	try {
 		await syncStripeDataToDb(db, secretKey, customerId);
-		console.log(`Successfully synced data for customer ${customerId}`);
+		
+		// Record successful processing
+		await db.insert(webhookEvents).values({
+			eventId: event.id,
+			eventType: event.type
+		}).onConflictDoNothing();
+		
+		logger.info('Successfully synced data for customer', { customerId, eventId: event.id });
 	} catch (err) {
-		console.error(`Failed to sync data for customer ${customerId}:`, err);
+		logger.error('Failed to sync data for customer', err, { customerId, eventId: event.id });
 		// Don't throw - we want to acknowledge the webhook even if sync fails
 		// Stripe will retry failed webhooks
+		// Don't record the event so it can be retried
 	}
 
 	return json({ received: true, processed: true });

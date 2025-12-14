@@ -62,7 +62,7 @@
 						name="email"
 						required
 						autocomplete="email"
-						value={form?.email ?? ''}
+						value={(form as { email?: string } | null)?.email ?? ''}
 						class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
 						placeholder="you@example.com"
 					/>

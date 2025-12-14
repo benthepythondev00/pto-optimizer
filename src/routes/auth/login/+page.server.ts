@@ -2,6 +2,8 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { createDb } from '$lib/server/db';
 import { authenticateUser, createSession, sessionCookie, validateRedirectUrl } from '$lib/server/auth';
+import { checkRateLimit, getClientIP } from '$lib/server/rate-limit';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	// Validate redirect URL to prevent open redirect attacks
@@ -27,6 +29,18 @@ export const actions: Actions = {
 		
 		const email = formData.get('email')?.toString() || '';
 		const password = formData.get('password')?.toString();
+
+		// Rate limiting
+		const clientIP = getClientIP(request);
+		const rateLimit = await checkRateLimit(db, clientIP, 'login');
+		
+		if (!rateLimit.allowed) {
+			logger.warn('Login rate limit exceeded', { ip: clientIP });
+			return fail(429, { 
+				message: `Too many login attempts. Please try again after ${rateLimit.resetAt.toLocaleTimeString()}.`, 
+				email 
+			});
+		}
 
 		// Validation
 		if (!email || !password) {
@@ -55,7 +69,14 @@ export const actions: Actions = {
 			const redirectTo = validateRedirectUrl(url.searchParams.get('redirect'));
 			throw redirect(302, redirectTo);
 		} catch (error) {
-			if (error instanceof Response) throw error; // Re-throw redirects
+			// Re-throw SvelteKit redirect/error responses
+			if (error && typeof error === 'object' && 'status' in error && 'location' in error) {
+				throw error; // This is a redirect
+			}
+			if (error instanceof Response) throw error;
+			
+			// Log the actual error for debugging
+			logger.error('Login error', error, { email: email.substring(0, 3) + '***' });
 			// Generic error message
 			return fail(400, { message: 'Failed to sign in. Please try again.', email });
 		}

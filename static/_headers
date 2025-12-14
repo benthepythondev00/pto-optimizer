@@ -1,0 +1,11 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com https://static.cloudflareinsights.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com; connect-src 'self' https://api.stripe.com https://checkout.stripe.com; img-src 'self' data: https:; font-src 'self' data:; base-uri 'self'; form-action 'self' https://checkout.stripe.com
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com")
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate

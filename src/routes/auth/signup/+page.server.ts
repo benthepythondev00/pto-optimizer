@@ -2,6 +2,8 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { createDb } from '$lib/server/db';
 import { createUser, createSession, sessionCookie, validateRedirectUrl } from '$lib/server/auth';
+import { checkRateLimit, getClientIP } from '$lib/server/rate-limit';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	// Validate redirect URL to prevent open redirect attacks
@@ -30,6 +32,18 @@ export const actions: Actions = {
 		const confirmPassword = formData.get('confirmPassword')?.toString();
 		const name = formData.get('name')?.toString()?.trim();
 
+		// Rate limiting
+		const clientIP = getClientIP(request);
+		const rateLimit = await checkRateLimit(db, clientIP, 'signup');
+		
+		if (!rateLimit.allowed) {
+			logger.warn('Signup rate limit exceeded', { ip: clientIP });
+			return fail(429, { 
+				message: `Too many signup attempts. Please try again after ${rateLimit.resetAt.toLocaleTimeString()}.`, 
+				email 
+			});
+		}
+
 		// Validation
 		if (!email || !password) {
 			return fail(400, { message: 'Email and password are required', email });
@@ -54,8 +68,10 @@ export const actions: Actions = {
 			return fail(400, { message: 'Passwords do not match', email });
 		}
 
-		// Name validation (optional but sanitize)
-		const sanitizedName = name && name.length <= 100 ? name : undefined;
+		// Name validation (optional but sanitize - remove any HTML tags)
+		const sanitizedName = name 
+			? name.trim().slice(0, 100).replace(/<[^>]*>/g, '').trim() || undefined
+			: undefined;
 
 		try {
 			// Create user with sanitized inputs
@@ -81,7 +97,7 @@ export const actions: Actions = {
 			if (error instanceof Response) throw error;
 			
 			// Log the actual error for debugging (visible in Cloudflare dashboard)
-			console.error('Signup error:', error);
+			logger.error('Signup error', error, { email: email.substring(0, 3) + '***' });
 			// Generic error message to prevent user enumeration
 			const message = error instanceof Error && error.message.includes('already exists') 
 				? 'An account with this email already exists'

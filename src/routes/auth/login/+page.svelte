@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 
 	let { form } = $props();
 	let loading = $state(false);
+	
+	// Check for password reset success
+	const resetSuccess = $derived($page.url.searchParams.get('reset') === 'success');
 </script>
 
 <svelte:head>
@@ -13,7 +17,7 @@
 	<div class="max-w-md w-full">
 		<div class="text-center mb-8">
 			<a href="/" class="inline-flex items-center gap-2 text-2xl font-bold text-gray-900">
-				<span class="text-3xl">🏖️</span>
+				<span class="text-3xl">&#127958;</span>
 				PTO Optimizer
 			</a>
 			<h1 class="mt-6 text-3xl font-bold text-gray-900">Welcome back</h1>
@@ -21,6 +25,12 @@
 		</div>
 
 		<div class="bg-white rounded-2xl shadow-xl p-8">
+			{#if resetSuccess}
+				<div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
+					Password reset successfully! You can now sign in with your new password.
+				</div>
+			{/if}
+			
 			{#if form?.message}
 				<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
 					{form.message}
@@ -48,16 +58,21 @@
 						name="email"
 						required
 						autocomplete="email"
-						value={form?.email ?? ''}
+						value={(form as { email?: string } | null)?.email ?? ''}
 						class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
 						placeholder="you@example.com"
 					/>
 				</div>
 
 				<div>
-					<label for="password" class="block text-sm font-medium text-gray-700 mb-1">
-						Password
-					</label>
+					<div class="flex items-center justify-between mb-1">
+						<label for="password" class="block text-sm font-medium text-gray-700">
+							Password
+						</label>
+						<a href="/auth/forgot-password" class="text-sm text-indigo-600 hover:text-indigo-500">
+							Forgot password?
+						</a>
+					</div>
 					<input
 						type="password"
 						id="password"
@@ -65,7 +80,7 @@
 						required
 						autocomplete="current-password"
 						class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-						placeholder="••••••••"
+						placeholder="********"
 					/>
 				</div>
 

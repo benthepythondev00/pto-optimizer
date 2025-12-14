@@ -107,6 +107,43 @@ export const analytics = sqliteTable('analytics', {
 	createdAtIdx: index('analytics_created_at_idx').on(table.createdAt),
 }));
 
+// Rate limiting table - for tracking request counts per IP/action
+export const rateLimits = sqliteTable('rate_limits', {
+	key: text('key').primaryKey(), // Format: 'action:ip' e.g., 'login:192.168.1.1'
+	count: integer('count').notNull().default(1),
+	windowStart: integer('window_start').notNull(), // Unix timestamp
+	updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+	updatedAtIdx: index('rate_limits_updated_at_idx').on(table.updatedAt),
+}));
+
+// Webhook events - for idempotency tracking
+export const webhookEvents = sqliteTable('webhook_events', {
+	eventId: text('event_id').primaryKey(), // Stripe event ID
+	eventType: text('event_type').notNull(),
+	processedAt: integer('processed_at', { mode: 'timestamp' })
+		.notNull()
+		.default(sql`(unixepoch())`),
+}, (table) => ({
+	processedAtIdx: index('webhook_events_processed_at_idx').on(table.processedAt),
+}));
+
+// Password reset tokens
+export const passwordResetTokens = sqliteTable('password_reset_tokens', {
+	id: text('id').primaryKey(), // Secure random token
+	userId: text('user_id')
+		.notNull()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+	usedAt: integer('used_at', { mode: 'timestamp' }), // Null if not used
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.default(sql`(unixepoch())`),
+}, (table) => ({
+	userIdIdx: index('password_reset_user_id_idx').on(table.userId),
+	expiresAtIdx: index('password_reset_expires_at_idx').on(table.expiresAt),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -120,3 +157,9 @@ export type Optimization = typeof optimizations.$inferSelect;
 export type NewOptimization = typeof optimizations.$inferInsert;
 export type Analytics = typeof analytics.$inferSelect;
 export type NewAnalytics = typeof analytics.$inferInsert;
+export type RateLimit = typeof rateLimits.$inferSelect;
+export type NewRateLimit = typeof rateLimits.$inferInsert;
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type NewWebhookEvent = typeof webhookEvents.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;

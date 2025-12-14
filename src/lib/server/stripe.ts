@@ -1,17 +1,31 @@
 import { eq } from 'drizzle-orm';
 import type { Database } from './db';
 import { users, subscriptions } from './db/schema';
+import { logger } from './logger';
 
-// Stripe API base URL
+// Stripe API base URL and version
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
+const STRIPE_API_VERSION = '2023-10-16'; // Pin to specific version for stability
 
-// Price IDs - Live Stripe price IDs
-export const STRIPE_PRICES = {
+// Default Price IDs - Can be overridden via environment variables
+// These are fallbacks if env vars are not set
+const DEFAULT_PRICES = {
 	monthly: 'price_1SeGM9RjwzOUgrKay986Itsc', // $4.99/month
 	yearly: 'price_1SeGNZRjwzOUgrKayTM5wF15'   // $39/year (save 35%)
 };
 
-// Stripe API helper
+// Get price IDs from environment or use defaults
+export function getStripePrices(env?: { STRIPE_PRICE_MONTHLY?: string; STRIPE_PRICE_YEARLY?: string }) {
+	return {
+		monthly: env?.STRIPE_PRICE_MONTHLY || DEFAULT_PRICES.monthly,
+		yearly: env?.STRIPE_PRICE_YEARLY || DEFAULT_PRICES.yearly
+	};
+}
+
+// For backwards compatibility - use getStripePrices() when you have env access
+export const STRIPE_PRICES = DEFAULT_PRICES;
+
+// Stripe API helper with version pinning
 async function stripeRequest(
 	endpoint: string,
 	secretKey: string,
@@ -24,7 +38,8 @@ async function stripeRequest(
 	
 	const headers: HeadersInit = {
 		'Authorization': `Bearer ${secretKey}`,
-		'Content-Type': 'application/x-www-form-urlencoded'
+		'Content-Type': 'application/x-www-form-urlencoded',
+		'Stripe-Version': STRIPE_API_VERSION // Pin API version for stability
 	};
 	
 	let bodyString: string | undefined;
@@ -47,6 +62,10 @@ async function stripeRequest(
 	const data = await response.json();
 	
 	if (!response.ok) {
+		logger.error('Stripe API error', new Error(data.error?.message || 'Unknown error'), {
+			endpoint,
+			status: response.status
+		});
 		throw new Error(data.error?.message || 'Stripe API error');
 	}
 	
@@ -164,16 +183,23 @@ export async function syncStripeDataToDb(
 	});
 	
 	if (!user) {
-		console.error(`No user found for Stripe customer ${stripeCustomerId}`);
+		logger.error('No user found for Stripe customer', undefined, { customerId: stripeCustomerId });
 		return;
 	}
 	
 	// Delete existing subscriptions for this customer (we'll re-add active ones)
 	await db.delete(subscriptions).where(eq(subscriptions.stripeCustomerId, stripeCustomerId));
 	
-	// Add current subscriptions
-	for (const stripeSub of stripeSubscriptions) {
-		await db.insert(subscriptions).values({
+	// Batch insert all subscriptions at once for better performance
+	if (stripeSubscriptions.length > 0) {
+		const subscriptionRecords = stripeSubscriptions.map((stripeSub: {
+			id: string;
+			status: string;
+			items: { data: Array<{ price: { id: string } }> };
+			current_period_start: number;
+			current_period_end: number;
+			cancel_at_period_end: boolean;
+		}) => ({
 			id: stripeSub.id,
 			userId: user.id,
 			stripeCustomerId: stripeCustomerId,
@@ -182,10 +208,16 @@ export async function syncStripeDataToDb(
 			currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
 			currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
 			cancelAtPeriodEnd: stripeSub.cancel_at_period_end
-		});
+		}));
+		
+		await db.insert(subscriptions).values(subscriptionRecords);
 	}
 	
-	console.log(`Synced ${stripeSubscriptions.length} subscriptions for user ${user.id}`);
+	logger.info('Synced Stripe subscriptions', {
+		userId: user.id,
+		customerId: stripeCustomerId,
+		count: stripeSubscriptions.length
+	});
 }
 
 // Timing-safe string comparison

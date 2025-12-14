@@ -1,7 +1,9 @@
-import { json, error, redirect } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDb } from '$lib/server/db';
-import { ensureStripeCustomer, createCheckoutSession, STRIPE_PRICES } from '$lib/server/stripe';
+import { ensureStripeCustomer, createCheckoutSession, getStripePrices } from '$lib/server/stripe';
+import { checkRateLimit, getClientIP } from '$lib/server/rate-limit';
+import { logger } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ request, locals, platform, url }) => {
 	// Require authentication
@@ -16,6 +18,15 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 	const db = createDb(platform.env.DB);
 	const secretKey = platform.env.STRIPE_SECRET_KEY;
 
+	// Rate limiting - prevent checkout abuse
+	const clientIP = getClientIP(request);
+	const rateLimit = await checkRateLimit(db, clientIP, 'checkout');
+	
+	if (!rateLimit.allowed) {
+		logger.warn('Checkout rate limit exceeded', { ip: clientIP, userId: locals.user.id });
+		throw error(429, 'Too many checkout attempts. Please try again later.');
+	}
+
 	try {
 		const body = await request.json();
 		const plan = body.plan as 'monthly' | 'yearly';
@@ -27,8 +38,9 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 		// Ensure user has a Stripe customer ID
 		const customerId = await ensureStripeCustomer(db, secretKey, locals.user.id);
 
-		// Create checkout session
-		const priceId = STRIPE_PRICES[plan];
+		// Create checkout session - use env vars if available, fallback to defaults
+		const prices = getStripePrices(platform.env);
+		const priceId = prices[plan];
 		const baseUrl = url.origin;
 
 		const session = await createCheckoutSession(secretKey, {
@@ -40,7 +52,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 
 		return json({ url: session.url });
 	} catch (err) {
-		console.error('Checkout error:', err);
+		logger.error('Checkout error', err, { userId: locals.user.id });
 		const message = err instanceof Error ? err.message : 'Failed to create checkout session';
 		throw error(500, message);
 	}

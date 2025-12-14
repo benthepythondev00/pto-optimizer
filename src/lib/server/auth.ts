@@ -1,6 +1,7 @@
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, inArray, lt } from 'drizzle-orm';
 import type { Database } from './db';
-import { users, sessions, subscriptions, type User, type Session } from './db/schema';
+import { users, sessions, subscriptions, passwordResetTokens, type User, type Session } from './db/schema';
+import { logger } from './logger';
 
 // Constants
 const SESSION_DURATION_DAYS = 30;
@@ -236,12 +237,15 @@ export async function invalidateAllUserSessions(db: Database, userId: string): P
 	await db.delete(sessions).where(eq(sessions.userId, userId));
 }
 
+// Valid subscription statuses that grant Pro access
+const VALID_SUBSCRIPTION_STATUSES = ['active', 'trialing'];
+
 // Get user's subscription status
 export async function getUserSubscription(db: Database, userId: string) {
 	const subscription = await db.query.subscriptions.findFirst({
 		where: and(
 			eq(subscriptions.userId, userId),
-			eq(subscriptions.status, 'active')
+			inArray(subscriptions.status, VALID_SUBSCRIPTION_STATUSES)
 		)
 	});
 	
@@ -252,6 +256,142 @@ export async function getUserSubscription(db: Database, userId: string) {
 export async function isUserSubscribed(db: Database, userId: string): Promise<boolean> {
 	const subscription = await getUserSubscription(db, userId);
 	return subscription !== undefined;
+}
+
+// Password reset token duration (1 hour)
+const PASSWORD_RESET_DURATION_HOURS = 1;
+
+// Create a password reset token
+export async function createPasswordResetToken(db: Database, email: string): Promise<string | null> {
+	const user = await db.query.users.findFirst({
+		where: eq(users.email, email.toLowerCase())
+	});
+	
+	// Don't reveal if user exists or not
+	if (!user) {
+		logger.info('Password reset requested for non-existent email', { 
+			email: email.substring(0, 3) + '***' 
+		});
+		return null;
+	}
+	
+	// Invalidate any existing tokens for this user
+	await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
+	
+	// Generate secure token
+	const token = generateSessionToken();
+	const expiresAt = new Date(Date.now() + PASSWORD_RESET_DURATION_HOURS * 60 * 60 * 1000);
+	
+	await db.insert(passwordResetTokens).values({
+		id: token,
+		userId: user.id,
+		expiresAt
+	});
+	
+	logger.info('Password reset token created', { userId: user.id });
+	
+	return token;
+}
+
+// Validate password reset token and return user
+export async function validatePasswordResetToken(
+	db: Database,
+	token: string
+): Promise<User | null> {
+	const resetToken = await db.query.passwordResetTokens.findFirst({
+		where: and(
+			eq(passwordResetTokens.id, token),
+			gt(passwordResetTokens.expiresAt, new Date())
+		)
+	});
+	
+	if (!resetToken || resetToken.usedAt) {
+		return null;
+	}
+	
+	const user = await db.query.users.findFirst({
+		where: eq(users.id, resetToken.userId)
+	});
+	
+	return user || null;
+}
+
+// Use password reset token to set new password
+export async function resetPassword(
+	db: Database,
+	token: string,
+	newPassword: string
+): Promise<boolean> {
+	const user = await validatePasswordResetToken(db, token);
+	
+	if (!user) {
+		return false;
+	}
+	
+	const passwordHash = await hashPassword(newPassword);
+	
+	// Update password
+	await db.update(users)
+		.set({ 
+			passwordHash,
+			updatedAt: new Date()
+		})
+		.where(eq(users.id, user.id));
+	
+	// Mark token as used
+	await db.update(passwordResetTokens)
+		.set({ usedAt: new Date() })
+		.where(eq(passwordResetTokens.id, token));
+	
+	// Invalidate all sessions for this user (force re-login with new password)
+	await invalidateAllUserSessions(db, user.id);
+	
+	logger.info('Password reset completed', { userId: user.id });
+	
+	return true;
+}
+
+// Delete user account (GDPR compliance)
+export async function deleteUserAccount(db: Database, userId: string): Promise<boolean> {
+	const user = await db.query.users.findFirst({
+		where: eq(users.id, userId)
+	});
+	
+	if (!user) {
+		return false;
+	}
+	
+	// Note: Foreign key cascades will handle related data deletion
+	// (sessions, subscriptions, usage_records, password_reset_tokens)
+	await db.delete(users).where(eq(users.id, userId));
+	
+	logger.info('User account deleted', { userId });
+	
+	return true;
+}
+
+// Cleanup expired sessions (call periodically)
+export async function cleanupExpiredSessions(db: Database): Promise<number> {
+	const result = await db.delete(sessions)
+		.where(lt(sessions.expiresAt, new Date()));
+	
+	const deleted = (result as { changes?: number }).changes ?? 0;
+	if (deleted > 0) {
+		logger.info('Cleaned up expired sessions', { count: deleted });
+	}
+	return deleted;
+}
+
+// Cleanup expired password reset tokens (call periodically)
+export async function cleanupExpiredResetTokens(db: Database): Promise<number> {
+	const result = await db.delete(passwordResetTokens)
+		.where(lt(passwordResetTokens.expiresAt, new Date()));
+	
+	const deleted = (result as { changes?: number }).changes ?? 0;
+	if (deleted > 0) {
+		logger.info('Cleaned up expired reset tokens', { count: deleted });
+	}
+	return deleted;
 }
 
 // Session cookie helpers

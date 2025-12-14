@@ -3,7 +3,9 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	
-	let { data } = $props();
+	let { data, form } = $props();
+	let showDeleteConfirm = $state(false);
+	let deleteLoading = $state(false);
 	
 	// Format date for display
 	function formatDate(date: Date | string | null): string {
@@ -128,17 +130,86 @@
 		<!-- Danger Zone -->
 		<section class="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
 			<h2 class="text-xl font-semibold text-red-600 mb-4">Danger Zone</h2>
-			<div class="flex items-center justify-between">
-				<div>
-					<p class="font-medium text-gray-900">Sign Out</p>
-					<p class="text-sm text-gray-500">Sign out of your account on this device</p>
+			
+			{#if form?.deleteError}
+				<div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+					{form.deleteError}
 				</div>
-				<a 
-					href="/auth/logout"
-					class="px-4 py-2 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-				>
-					Sign Out
-				</a>
+			{/if}
+			
+			<div class="space-y-4">
+				<!-- Sign Out -->
+				<div class="flex items-center justify-between py-3 border-b border-gray-100">
+					<div>
+						<p class="font-medium text-gray-900">Sign Out</p>
+						<p class="text-sm text-gray-500">Sign out of your account on this device</p>
+					</div>
+					<a 
+						href="/auth/logout"
+						class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+					>
+						Sign Out
+					</a>
+				</div>
+				
+				<!-- Delete Account -->
+				<div class="flex items-center justify-between py-3">
+					<div>
+						<p class="font-medium text-gray-900">Delete Account</p>
+						<p class="text-sm text-gray-500">Permanently delete your account and all data</p>
+					</div>
+					{#if !showDeleteConfirm}
+						<button 
+							type="button"
+							onclick={() => showDeleteConfirm = true}
+							class="px-4 py-2 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+						>
+							Delete Account
+						</button>
+					{/if}
+				</div>
+				
+				<!-- Delete Confirmation -->
+				{#if showDeleteConfirm}
+					<div class="bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
+						<p class="text-sm text-red-800 mb-4">
+							<strong>Warning:</strong> This action cannot be undone. All your data including saved optimizations, 
+							usage history, and account information will be permanently deleted.
+						</p>
+						<div class="flex gap-3">
+							<form 
+								method="POST" 
+								action="?/deleteAccount"
+								use:enhance={() => {
+									deleteLoading = true;
+									return async ({ update }) => {
+										deleteLoading = false;
+										await update();
+									};
+								}}
+							>
+								<button 
+									type="submit"
+									disabled={deleteLoading}
+									class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+								>
+									{#if deleteLoading}
+										Deleting...
+									{:else}
+										Yes, Delete My Account
+									{/if}
+								</button>
+							</form>
+							<button 
+								type="button"
+								onclick={() => showDeleteConfirm = false}
+								class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				{/if}
 			</div>
 		</section>
 	</main>
